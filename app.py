@@ -1,10 +1,13 @@
+# ============================================
+# app.py - Cookies hardcoded (Security Risk!)
+# ============================================
+
 from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import time
 import json
 import re
@@ -14,27 +17,31 @@ import logging
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# ============== COOKIES ==============
+# ============== HARDCODED COOKIES ==============
+# ⚠️ WARNING: GitHub-এ upload করলে leak হতে পারে!
 FIXED_COOKIES = {
-    'sso': os.environ.get('SSO_COOKIE', ''),
-    'citizen': os.environ.get('CITIZEN_COOKIE', ''),
-    'cf_clearance': os.environ.get('CF_CLEARANCE_COOKIE', '')
+    'sso': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI5YWE0NjczYi02OTIzLTQ4NTUtOWZjOS1mZjU2YjA0ZGJkZjMiLCJqdGkiOiIwNTVjNWE1Y2VkZDk0OTY1NzFiZDNjZThmM2Q3Mzc2ODU2NjVjNDJjYTZkNzkxN2U0ZGQ2MjE1MzEzNTEwZjQ5YmQwMDNhM2MwODY3ZGY5NCIsImlhdCI6MTc4MjUzNzE5My4yMzI2OTksIm5iZiI6MTc4MjUzNzE5My4yMzI3MDEsImV4cCI6MTc4MjYyMzU5My4xOTAyMTIsInN1YiI6IjEwMDkyNDA5Iiwic2NvcGVzIjpbInZpZXctdXNlciJdfQ.gNE9X2uBu6_asyEyETaGLjnCBC6XwTeVHJ0cB8FNli3JKiz_Xsr6RzFLF5tx7mufrI8Pk9G2iBvCSGriiNeIRxFFCgQ_gqhIWDHOTNE5ACG2gMyXHXvqkcuNaN9pPAqlHxTZWIYN3A4Ewy21FwSJhnxsPmWsxjdhF-QOQ3Aj11fkWIHoUD8Df_O1GP4HMu2FVToGWozT8wa7HXsrK5aAvbF4KG9SF6IjO0XUag9DAZjPEwUm6ZlXepOuUr3CR4CW86YSwZUMGWH1PR7RngAQXulyu6tOoqPL87DX5J-BS0xSr_RoC28T3deHvXlb0F6wL4Fv6V4OMDvH9rrXMhsQNdngWpzIaSO6cPn-GiGnOfkS69rleuH2rn_pQnsQvmReE71-YTcbCz2XjcB3h6aJtaFPPOD13cHi7IdidDGkNk0YbX52G6R1ozRoH2mE72AhHLFkW0pIG9VNsyvHU-MAb70ut5Yer6zVRfKrH3UGCBG830rDYBx8r7288sEu7VFgPm3Z3AqH65I6pmuTPpR0UJ4HhJlGphVOwXhO6LYZ6BezV246tTHJ77_q7nLURdoiL6gEHFwA5lnZokXre5vXdnkshOdyM5c6_Y2KgI72VjADfPunOK8o_5C36BLLXorItbgOtBytHY4vkm2BPnxF1M9E1Qy9NsQI2GDu_5oJbaw',
+    
+    'citizen': '%7B%22id%22%3A10149701%2C%22username%22%3A%2201626044535%22%2C%22name%22%3A%22%E0%A6%AE%E0%A7%8B%E0%A6%B8%E0%A6%BE%E0%A6%83%20%E0%A6%B6%E0%A6%BF%E0%A6%B2%E0%A7%8D%E0%A6%AA%E0%A7%80%20%E0%A6%86%E0%A6%95%E0%A7%8D%E0%A6%A4%E0%A6%BE%E0%A6%B0%22%2C%22name_en%22%3Anull%2C%22photo%22%3Anull%2C%22phone%22%3A%2201626044535%22%2C%22email%22%3Anull%2C%22father_name%22%3A%22%E0%A6%AE%E0%A7%8B%E0%A6%83%20%E0%A6%86%E0%A6%AC%E0%A7%8D%E0%A6%A6%E0%A7%81%E0%A6%B2%20%E0%A6%B9%E0%A7%87%E0%A6%95%E0%A6%BF%E0%A6%AE%22%2C%22father_name_en%22%3Anull%2C%22mother_name_en%22%3Anull%2C%22spouse_name%22%3Anull%2C%22religion%22%3Anull%2C%22occupation%22%3Anull%2C%22nationality%22%3Anull%2C%22mother_name%22%3A%22%E0%A6%AE%E0%A7%8B%E0%A6%B8%E0%A6%BE%E0%A6%83%20%E0%A6%B0%E0%A6%BE%E0%A6%A8%E0%A7%81%20%E0%A6%86%E0%A6%95%E0%A7%8D%E0%A6%A4%E0%A6%BE%E0%A6%B0%20%E0%A6%96%E0%A6%BE%E0%A6%A4%E0%A7%81%E0%A6%A8%22%2C%22nid%22%3A%221461347922%22%2C%22dob%22%3A%221967-08-28%22%2C%22address%22%3A%22%E0%A6%AC%E0%A6%BE%E0%A6%B2%E0%A6%BF%E0%A7%9F%E0%A6%BE%2C%20%E0%A6%AC%E0%A6%BE%E0%A6%B2%E0%A6%BF%E0%A7%9F%E0%A6%BE%2C%20%E0%A6%B8%E0%A6%BE%E0%A6%A4%E0%A7%8D%E0%A6%AF%E0%A6%BE%E0%A6%9F%E0%A6%BF-2410%2C%20%E0%A6%AA%E0%A7%82%E0%A6%B0%E0%A7%8D%E0%A6%AC%E0%A6%A7%E0%A6%B2%E0%A6%BE%2C%20%E0%A6%A8%E0%A7%87%E0%A6%A4%E0%A7%8D%E0%A6%B0%E0%A6%95%E0%A7%8B%E0%A6%A8%E0%A6%BE%2C%22%2C%22present_address%22%3Anull%2C%22gender%22%3Anull%2C%22progressPoint%22%3A40%7D',
+    
+    'cf_clearance': '2EEySUtlpIoq0e202DkIdekLck_n7aieSnaAwIiSXdw-1782546876-1.2.1.1-flcoha5IXjchjal4pg0JFSonTMB7hjXXGP5REZZSP5qHl1mBqqt7SB_A0WV2gz3PQ.aZad2Q6dtaHxAKMCWlsEQTf2s1SXOiyygChxhvvQt72RQ2LMmD913Z4_AtRGzyU8K3gURVVKDC8CPvdFjgRh1Hqs_hhNvoSdy1WtSG8xu95_bC_9g2DHVphVvoDetV9najnh27XqiDQfajBW9FsNCP7nk6XJ3rTxZkhNbC7Ho5AfGq6FUVkOn1fccHiKvjxcmpUwCYqJrTOWEaJRNNs4mhAniSn.38QJVm2uonXJO_eWkKVG4eVcyZw4QsqH935Hh6c2ImkayzNjXpAmIuuw'
 }
 
 # ============== CHROME SETUP ==============
 def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--headless')  # ✅ Render-এ headless লাগবে
+    chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1280,800')
-    # Anti-detection
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # Render-এ Chrome pre-installed থাকে
+    # Render-এ Chrome path (Docker/Buildpack)
+    chrome_options.binary_location = "/usr/bin/google-chrome-stable"
+    
     service = Service('/usr/bin/chromedriver')
     driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
@@ -88,7 +95,7 @@ def capture_jwt(params):
         time.sleep(3)
         
         if 'login' in driver.current_url:
-            return {'success': False, 'error': 'Cookies expired - update SSO_COOKIE'}
+            return {'success': False, 'error': 'Cookies expired - need fresh cookies'}
         
         # Step 3: Fill dropdowns
         dropdown_fields = [
@@ -182,6 +189,7 @@ def capture_jwt(params):
 def home():
     return jsonify({
         'status': 'JWT Capture API is running',
+        'cookies_loaded': list(FIXED_COOKIES.keys()),
         'endpoints': {
             'POST /capture': 'Capture JWT token',
             'GET /health': 'Health check'
