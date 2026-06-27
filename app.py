@@ -1,6 +1,5 @@
 # ============================================
-# app.py - JWT Capture API for Render Docker
-# ChromeDriver explicit path
+# app.py - JWT Capture API (React Select Fixed)
 # ============================================
 
 from flask import Flask, request, jsonify
@@ -9,12 +8,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 import json
 import re
 import os
 import logging
-import subprocess
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -28,47 +28,130 @@ FIXED_COOKIES = {
     'cf_clearance': '2EEySUtlpIoq0e202DkIdekLck_n7aieSnaAwIiSXdw-1782546876-1.2.1.1-flcoha5IXjchjal4pg0JFSonTMB7hjXXGP5REZZSP5qHl1mBqqt7SB_A0WV2gz3PQ.aZad2Q6dtaHxAKMCWlsEQTf2s1SXOiyygChxhvvQt72RQ2LMmD913Z4_AtRGzyU8K3gURVVKDC8CPvdFjgRh1Hqs_hhNvoSdy1WtSG8xu95_bC_9g2DHVphVvoDetV9najnh27XqiDQfajBW9FsNCP7nk6XJ3rTxZkhNbC7Ho5AfGq6FUVkOn1fccHiKvjxcmpUwCYqJrTOWEaJRNNs4mhAniSn.38QJVm2uonXJO_eWkKVG4eVcyZw4QsqH935Hh6c2ImkayzNjXpAmIuuw'
 }
 
-# ============== CHROME SETUP (DOCKER EXPLICIT PATH) ==============
+# ============== CHROME SETUP ==============
 def get_driver():
     chrome_options = Options()
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--window-size=1280,800')
+    chrome_options.add_argument('--window-size=1920,1080')  # ✅ Larger viewport
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # ✅ Explicit Chrome path for Docker image
-    chrome_options.binary_location = "/usr/bin/google-chrome"
+    # User agent to avoid detection
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
-    # ✅ Explicit ChromeDriver path
+    chrome_options.binary_location = "/usr/bin/google-chrome"
     service = Service('/usr/bin/chromedriver')
     
     driver = webdriver.Chrome(service=service, options=chrome_options)
-    
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
 
-# ============== REACT SELECT HANDLER ==============
+# ============== REACT SELECT HANDLER (IMPROVED) ==============
 def click_react_select(driver, field_name, value, wait_time=3):
+    """
+    Improved React Select handler with multiple fallback strategies
+    """
+    app.logger.info(f"Selecting {field_name} = {value}")
+    
     try:
+        # Strategy 1: Find by input name and click parent container
         inputs = driver.find_elements(By.CSS_SELECTOR, f"input[name='{field_name}']")
+        app.logger.info(f"Found {len(inputs)} inputs for {field_name}")
+        
         for inp in inputs:
             try:
-                container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'css-b62m3t-container')]")
+                # Try to find React Select container
+                container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'css-')]")
             except:
-                container = inp.find_element(By.XPATH, "..")
+                try:
+                    container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'select__')]")
+                except:
+                    # Fallback: just use the input's parent
+                    container = inp.find_element(By.XPATH, "..")
             
-            container.click()
+            # Scroll into view
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", container)
             time.sleep(0.5)
-            actions = ActionChains(driver)
-            actions.send_keys(str(value)).pause(0.5).send_keys(u'\ue007').perform()
+            
+            # Click using JavaScript (more reliable than .click())
+            driver.execute_script("arguments[0].click();", container)
+            app.logger.info(f"Clicked container for {field_name}")
+            time.sleep(1)
+            
+            # Clear any existing text and type new value
+            inp.clear()
+            time.sleep(0.3)
+            
+            # Type value character by character
+            for char in str(value):
+                inp.send_keys(char)
+                time.sleep(0.1)
+            
+            time.sleep(0.5)
+            
+            # Press Enter
+            inp.send_keys(u'\ue007')  # Enter key
+            app.logger.info(f"Typed {value} + Enter for {field_name}")
+            time.sleep(wait_time)
+            
+            return True
+            
+    except Exception as e:
+        app.logger.error(f"Strategy 1 failed for {field_name}: {e}")
+    
+    # Strategy 2: Find by placeholder or label text
+    try:
+        # Try to find by associated label
+        labels = driver.find_elements(By.XPATH, f"//label[contains(text(), '{field_name}') or @for='{field_name}']")
+        for label in labels:
+            driver.execute_script("arguments[0].click();", label)
+            time.sleep(1)
+            
+            # Find input after clicking label
+            inp = driver.find_element(By.NAME, field_name)
+            inp.clear()
+            for char in str(value):
+                inp.send_keys(char)
+                time.sleep(0.1)
+            inp.send_keys(u'\ue007')
             time.sleep(wait_time)
             return True
+            
     except Exception as e:
-        app.logger.error(f"Dropdown error {field_name}: {e}")
+        app.logger.error(f"Strategy 2 failed for {field_name}: {e}")
+    
+    # Strategy 3: Find all React Select containers and try by index
+    try:
+        all_containers = driver.find_elements(By.CSS_SELECTOR, "div[class*='css-'][class*='container']")
+        app.logger.info(f"Found {len(all_containers)} React Select containers total")
+        
+        # Try to find which index this field should be
+        field_order = ['division_id', 'district_id', 'upazila_id', 'mouja_id']
+        if field_name in field_order:
+            idx = field_order.index(field_name)
+            if idx < len(all_containers):
+                container = all_containers[idx]
+                driver.execute_script("arguments[0].click();", container)
+                time.sleep(1)
+                
+                # Find input inside this container
+                inp = container.find_element(By.TAG_NAME, 'input')
+                inp.clear()
+                for char in str(value):
+                    inp.send_keys(char)
+                    time.sleep(0.1)
+                inp.send_keys(u'\ue007')
+                time.sleep(wait_time)
+                return True
+                
+    except Exception as e:
+        app.logger.error(f"Strategy 3 failed for {field_name}: {e}")
+    
+    app.logger.error(f"All strategies failed for {field_name}")
     return False
 
 # ============== MAIN JWT CAPTURE ==============
@@ -97,7 +180,7 @@ def capture_jwt(params):
         
         # Step 2: Navigate to payment
         driver.get('https://portal.ldtax.gov.bd/citizen/representative-payment')
-        time.sleep(3)
+        time.sleep(5)  # ✅ Increased wait time for page load
         
         current_url = driver.current_url
         app.logger.info(f"Current URL: {current_url}")
@@ -105,18 +188,28 @@ def capture_jwt(params):
         if 'login' in current_url:
             return {'success': False, 'error': 'Cookies expired - need fresh cookies'}
         
-        # Step 3: Fill dropdowns
+        # Take screenshot for debugging
+        try:
+            driver.save_screenshot('page_loaded.png')
+            app.logger.info("Screenshot saved: page_loaded.png")
+        except:
+            pass
+        
+        # Step 3: Fill dropdowns one by one with extra wait
         dropdown_fields = [
-            ('division_id', params['division_id'], 2),
-            ('district_id', params['district_id'], 2),
-            ('upazila_id', params['upazila_id'], 2),
-            ('mouja_id', params['mouja_id'], 2),
+            ('division_id', params['division_id'], 4),
+            ('district_id', params['district_id'], 4),
+            ('upazila_id', params['upazila_id'], 4),
+            ('mouja_id', params['mouja_id'], 4),
         ]
         
         for field_name, value, wait in dropdown_fields:
-            app.logger.info(f"Selecting {field_name} = {value}")
             if not click_react_select(driver, field_name, value, wait):
-                return {'success': False, 'error': f'Failed to select {field_name}'}
+                # Try one more time with longer wait
+                app.logger.info(f"Retrying {field_name}...")
+                time.sleep(2)
+                if not click_react_select(driver, field_name, value, wait + 2):
+                    return {'success': False, 'error': f'Failed to select {field_name}'}
         
         # Step 4: Fill text fields
         try:
@@ -135,12 +228,18 @@ def capture_jwt(params):
         except Exception as e:
             return {'success': False, 'error': f'Holding field error: {e}'}
         
+        # Screenshot before search
+        try:
+            driver.save_screenshot('before_search.png')
+        except:
+            pass
+        
         # Step 5: Click search
         try:
             buttons = driver.find_elements(By.TAG_NAME, 'button')
             for btn in buttons:
                 if 'অনুসন্ধান' in btn.text:
-                    btn.click()
+                    driver.execute_script("arguments[0].click();", btn)
                     app.logger.info("Search button clicked")
                     break
         except:
@@ -151,7 +250,13 @@ def capture_jwt(params):
                 }
             """)
         
-        time.sleep(5)
+        time.sleep(8)  # ✅ Increased wait for results
+        
+        # Screenshot after search
+        try:
+            driver.save_screenshot('after_search.png')
+        except:
+            pass
         
         # Step 6: Extract JWT
         current_url = driver.current_url
