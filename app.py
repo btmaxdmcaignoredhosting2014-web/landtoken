@@ -1,5 +1,6 @@
 # ============================================
-# app.py - Cookies hardcoded (Security Risk!)
+# app.py - JWT Capture API for Render.com
+# Docker: selenium/standalone-chrome
 # ============================================
 
 from flask import Flask, request, jsonify
@@ -18,7 +19,6 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
 # ============== HARDCODED COOKIES ==============
-# ⚠️ WARNING: GitHub-এ upload করলে leak হতে পারে!
 FIXED_COOKIES = {
     'sso': 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI5YWE0NjczYi02OTIzLTQ4NTUtOWZjOS1mZjU2YjA0ZGJkZjMiLCJqdGkiOiIwNTVjNWE1Y2VkZDk0OTY1NzFiZDNjZThmM2Q3Mzc2ODU2NjVjNDJjYTZkNzkxN2U0ZGQ2MjE1MzEzNTEwZjQ5YmQwMDNhM2MwODY3ZGY5NCIsImlhdCI6MTc4MjUzNzE5My4yMzI2OTksIm5iZiI6MTc4MjUzNzE5My4yMzI3MDEsImV4cCI6MTc4MjYyMzU5My4xOTAyMTIsInN1YiI6IjEwMDkyNDA5Iiwic2NvcGVzIjpbInZpZXctdXNlciJdfQ.gNE9X2uBu6_asyEyETaGLjnCBC6XwTeVHJ0cB8FNli3JKiz_Xsr6RzFLF5tx7mufrI8Pk9G2iBvCSGriiNeIRxFFCgQ_gqhIWDHOTNE5ACG2gMyXHXvqkcuNaN9pPAqlHxTZWIYN3A4Ewy21FwSJhnxsPmWsxjdhF-QOQ3Aj11fkWIHoUD8Df_O1GP4HMu2FVToGWozT8wa7HXsrK5aAvbF4KG9SF6IjO0XUag9DAZjPEwUm6ZlXepOuUr3CR4CW86YSwZUMGWH1PR7RngAQXulyu6tOoqPL87DX5J-BS0xSr_RoC28T3deHvXlb0F6wL4Fv6V4OMDvH9rrXMhsQNdngWpzIaSO6cPn-GiGnOfkS69rleuH2rn_pQnsQvmReE71-YTcbCz2XjcB3h6aJtaFPPOD13cHi7IdidDGkNk0YbX52G6R1ozRoH2mE72AhHLFkW0pIG9VNsyvHU-MAb70ut5Yer6zVRfKrH3UGCBG830rDYBx8r7288sEu7VFgPm3Z3AqH65I6pmuTPpR0UJ4HhJlGphVOwXhO6LYZ6BezV246tTHJ77_q7nLURdoiL6gEHFwA5lnZokXre5vXdnkshOdyM5c6_Y2KgI72VjADfPunOK8o_5C36BLLXorItbgOtBytHY4vkm2BPnxF1M9E1Qy9NsQI2GDu_5oJbaw',
     
@@ -27,7 +27,7 @@ FIXED_COOKIES = {
     'cf_clearance': '2EEySUtlpIoq0e202DkIdekLck_n7aieSnaAwIiSXdw-1782546876-1.2.1.1-flcoha5IXjchjal4pg0JFSonTMB7hjXXGP5REZZSP5qHl1mBqqt7SB_A0WV2gz3PQ.aZad2Q6dtaHxAKMCWlsEQTf2s1SXOiyygChxhvvQt72RQ2LMmD913Z4_AtRGzyU8K3gURVVKDC8CPvdFjgRh1Hqs_hhNvoSdy1WtSG8xu95_bC_9g2DHVphVvoDetV9najnh27XqiDQfajBW9FsNCP7nk6XJ3rTxZkhNbC7Ho5AfGq6FUVkOn1fccHiKvjxcmpUwCYqJrTOWEaJRNNs4mhAniSn.38QJVm2uonXJO_eWkKVG4eVcyZw4QsqH935Hh6c2ImkayzNjXpAmIuuw'
 }
 
-# ============== CHROME SETUP ==============
+# ============== CHROME SETUP (DOCKER OPTIMIZED) ==============
 def get_driver():
     chrome_options = Options()
     chrome_options.add_argument('--headless')
@@ -39,11 +39,21 @@ def get_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # Render-এ Chrome path (Docker/Buildpack)
-    chrome_options.binary_location = "/usr/bin/google-chrome-stable"
+    # ✅ Docker image-এ Chrome auto-detect হবে
+    # selenium/standalone-chrome image-এ pre-installed
     
-    service = Service('/usr/bin/chromedriver')
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    try:
+        driver = webdriver.Chrome(options=chrome_options)
+    except Exception as e:
+        app.logger.error(f"Chrome init error: {e}")
+        # Fallback: explicit path try
+        try:
+            service = Service('/usr/bin/chromedriver')
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        except Exception as e2:
+            app.logger.error(f"Fallback error: {e2}")
+            raise e
+    
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
 
@@ -72,7 +82,7 @@ def capture_jwt(params):
     driver = None
     try:
         driver = get_driver()
-        app.logger.info("Chrome started")
+        app.logger.info("Chrome started successfully")
         
         # Step 1: Set cookies
         driver.get('https://portal.ldtax.gov.bd')
@@ -87,14 +97,18 @@ def capture_jwt(params):
                         'domain': 'portal.ldtax.gov.bd',
                         'path': '/'
                     })
+                    app.logger.info(f"Cookie set: {name}")
                 except Exception as e:
-                    app.logger.warning(f"Cookie error: {e}")
+                    app.logger.warning(f"Cookie error {name}: {e}")
         
         # Step 2: Navigate to payment
         driver.get('https://portal.ldtax.gov.bd/citizen/representative-payment')
         time.sleep(3)
         
-        if 'login' in driver.current_url:
+        current_url = driver.current_url
+        app.logger.info(f"Current URL: {current_url}")
+        
+        if 'login' in current_url:
             return {'success': False, 'error': 'Cookies expired - need fresh cookies'}
         
         # Step 3: Fill dropdowns
@@ -106,6 +120,7 @@ def capture_jwt(params):
         ]
         
         for field_name, value, wait in dropdown_fields:
+            app.logger.info(f"Selecting {field_name} = {value}")
             if not click_react_select(driver, field_name, value, wait):
                 return {'success': False, 'error': f'Failed to select {field_name}'}
         
@@ -114,6 +129,7 @@ def capture_jwt(params):
             khotian = driver.find_element(By.NAME, 'khotian_no')
             khotian.clear()
             khotian.send_keys(params['khotian_no'])
+            app.logger.info(f"Khotian: {params['khotian_no']}")
         except Exception as e:
             return {'success': False, 'error': f'Khotian field error: {e}'}
         
@@ -121,6 +137,7 @@ def capture_jwt(params):
             holding = driver.find_element(By.NAME, 'holding_no')
             holding.clear()
             holding.send_keys(params['holding_no'])
+            app.logger.info(f"Holding: {params['holding_no']}")
         except Exception as e:
             return {'success': False, 'error': f'Holding field error: {e}'}
         
@@ -130,6 +147,7 @@ def capture_jwt(params):
             for btn in buttons:
                 if 'অনুসন্ধান' in btn.text:
                     btn.click()
+                    app.logger.info("Search button clicked")
                     break
         except:
             driver.execute_script("""
@@ -143,6 +161,7 @@ def capture_jwt(params):
         
         # Step 6: Extract JWT
         current_url = driver.current_url
+        app.logger.info(f"URL after search: {current_url}")
         
         if 'holding/eyJ' in current_url:
             match = re.search(r'holding/([^.]+\.[^.]+\.[^?]+)', current_url)
@@ -155,6 +174,8 @@ def capture_jwt(params):
                 }
         
         links = driver.find_elements(By.XPATH, "//a[contains(@href, 'holding/eyJ')]")
+        app.logger.info(f"Found {len(links)} JWT links")
+        
         for link in links:
             href = link.get_attribute('href')
             match = re.search(r'holding/([^.]+\.[^.]+\.[^?]+)', href)
@@ -179,10 +200,12 @@ def capture_jwt(params):
         return {'success': False, 'error': 'JWT not found', 'url': current_url}
         
     except Exception as e:
+        app.logger.error(f"Capture error: {e}")
         return {'success': False, 'error': str(e)}
     finally:
         if driver:
             driver.quit()
+            app.logger.info("Driver closed")
 
 # ============== API ENDPOINTS ==============
 @app.route('/')
@@ -223,4 +246,4 @@ def capture():
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
