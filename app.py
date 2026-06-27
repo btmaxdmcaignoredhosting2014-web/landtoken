@@ -1,6 +1,6 @@
 # ============================================
 # app.py - JWT Capture API for Render.com
-# Docker: selenium/standalone-chrome
+# Python Runtime + Chrome Install
 # ============================================
 
 from flask import Flask, request, jsonify
@@ -27,7 +27,7 @@ FIXED_COOKIES = {
     'cf_clearance': '2EEySUtlpIoq0e202DkIdekLck_n7aieSnaAwIiSXdw-1782546876-1.2.1.1-flcoha5IXjchjal4pg0JFSonTMB7hjXXGP5REZZSP5qHl1mBqqt7SB_A0WV2gz3PQ.aZad2Q6dtaHxAKMCWlsEQTf2s1SXOiyygChxhvvQt72RQ2LMmD913Z4_AtRGzyU8K3gURVVKDC8CPvdFjgRh1Hqs_hhNvoSdy1WtSG8xu95_bC_9g2DHVphVvoDetV9najnh27XqiDQfajBW9FsNCP7nk6XJ3rTxZkhNbC7Ho5AfGq6FUVkOn1fccHiKvjxcmpUwCYqJrTOWEaJRNNs4mhAniSn.38QJVm2uonXJO_eWkKVG4eVcyZw4QsqH935Hh6c2ImkayzNjXpAmIuuw'
 }
 
-# ============== CHROME SETUP (DOCKER OPTIMIZED) ==============
+# ============== CHROME SETUP (RENDER PYTHON RUNTIME) ==============
 def get_driver():
     chrome_options = Options()
     chrome_options.add_argument('--headless')
@@ -39,21 +39,13 @@ def get_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # ✅ Docker image-এ Chrome auto-detect হবে
-    # selenium/standalone-chrome image-এ pre-installed
+    # ✅ Render Python runtime-এ Chrome path
+    chrome_options.binary_location = "/usr/bin/google-chrome-stable"
     
-    try:
-        driver = webdriver.Chrome(options=chrome_options)
-    except Exception as e:
-        app.logger.error(f"Chrome init error: {e}")
-        # Fallback: explicit path try
-        try:
-            service = Service('/usr/bin/chromedriver')
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-        except Exception as e2:
-            app.logger.error(f"Fallback error: {e2}")
-            raise e
+    # ChromeDriver path (Build Command-এ install হবে)
+    service = Service('/usr/bin/chromedriver')
     
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
 
@@ -246,4 +238,4 @@ def capture():
     return jsonify(result)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
