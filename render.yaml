@@ -1,19 +1,8 @@
 services:
   - type: web
-    name: landtax-jwt-api
-    runtime: python
-    plan: standard  # ✅ Selenium-এর জন্য Standard plan (RAM বেশি লাগে)
-    buildCommand: |
-      apt-get update && apt-get install -y wget gnupg2
-      wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -
-      echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list
-      apt-get update && apt-get install -y google-chrome-stable
-      pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+    name: landtoken
+    runtime: docker
+    plan: standard
     envVars:
-      - key: SSO_COOKIE
-        sync: false  # Render dashboard-এ set করবেন
-      - key: CITIZEN_COOKIE
-        sync: false
-      - key: CF_CLEARANCE_COOKIE
-        sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"
