@@ -1,5 +1,5 @@
 # ============================================
-# app.py - JWT Capture API (React Select Fixed)
+# app.py - JWT Capture API (Page Load Fixed)
 # ============================================
 
 from flask import Flask, request, jsonify
@@ -35,12 +35,12 @@ def get_driver():
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--window-size=1920,1080')  # ✅ Larger viewport
+    chrome_options.add_argument('--window-size=1920,1080')
     chrome_options.add_argument('--disable-blink-features=AutomationControlled')
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # User agent to avoid detection
+    # User agent
     chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
     
     chrome_options.binary_location = "/usr/bin/google-chrome"
@@ -50,109 +50,71 @@ def get_driver():
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
 
-# ============== REACT SELECT HANDLER (IMPROVED) ==============
-def click_react_select(driver, field_name, value, wait_time=3):
-    """
-    Improved React Select handler with multiple fallback strategies
-    """
+# ============== REACT SELECT HANDLER (FIXED) ==============
+def click_react_select(driver, field_name, value, wait_time=5):
     app.logger.info(f"Selecting {field_name} = {value}")
     
     try:
-        # Strategy 1: Find by input name and click parent container
-        inputs = driver.find_elements(By.CSS_SELECTOR, f"input[name='{field_name}']")
-        app.logger.info(f"Found {len(inputs)} inputs for {field_name}")
+        # Wait for page to be fully loaded
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.TAG_NAME, "body"))
+        )
         
-        for inp in inputs:
+        # Strategy 1: Find input by name with explicit wait
+        try:
+            inp = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, f"input[name='{field_name}']"))
+            )
+            app.logger.info(f"Found input for {field_name}")
+        except:
+            app.logger.warning(f"Input not found for {field_name}, trying alternatives...")
+            # Try finding by ID
             try:
-                # Try to find React Select container
-                container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'css-')]")
+                inp = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.ID, field_name))
+                )
             except:
+                # Try finding by placeholder
                 try:
-                    container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'select__')]")
+                    inp = driver.find_element(By.XPATH, f"//input[contains(@placeholder, '{field_name}')]")
                 except:
-                    # Fallback: just use the input's parent
-                    container = inp.find_element(By.XPATH, "..")
-            
-            # Scroll into view
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", container)
-            time.sleep(0.5)
-            
-            # Click using JavaScript (more reliable than .click())
-            driver.execute_script("arguments[0].click();", container)
-            app.logger.info(f"Clicked container for {field_name}")
-            time.sleep(1)
-            
-            # Clear any existing text and type new value
-            inp.clear()
-            time.sleep(0.3)
-            
-            # Type value character by character
-            for char in str(value):
-                inp.send_keys(char)
-                time.sleep(0.1)
-            
-            time.sleep(0.5)
-            
-            # Press Enter
-            inp.send_keys(u'\ue007')  # Enter key
-            app.logger.info(f"Typed {value} + Enter for {field_name}")
-            time.sleep(wait_time)
-            
-            return True
-            
-    except Exception as e:
-        app.logger.error(f"Strategy 1 failed for {field_name}: {e}")
-    
-    # Strategy 2: Find by placeholder or label text
-    try:
-        # Try to find by associated label
-        labels = driver.find_elements(By.XPATH, f"//label[contains(text(), '{field_name}') or @for='{field_name}']")
-        for label in labels:
-            driver.execute_script("arguments[0].click();", label)
-            time.sleep(1)
-            
-            # Find input after clicking label
-            inp = driver.find_element(By.NAME, field_name)
-            inp.clear()
-            for char in str(value):
-                inp.send_keys(char)
-                time.sleep(0.1)
-            inp.send_keys(u'\ue007')
-            time.sleep(wait_time)
-            return True
-            
-    except Exception as e:
-        app.logger.error(f"Strategy 2 failed for {field_name}: {e}")
-    
-    # Strategy 3: Find all React Select containers and try by index
-    try:
-        all_containers = driver.find_elements(By.CSS_SELECTOR, "div[class*='css-'][class*='container']")
-        app.logger.info(f"Found {len(all_containers)} React Select containers total")
+                    app.logger.error(f"Cannot find element for {field_name}")
+                    return False
         
-        # Try to find which index this field should be
-        field_order = ['division_id', 'district_id', 'upazila_id', 'mouja_id']
-        if field_name in field_order:
-            idx = field_order.index(field_name)
-            if idx < len(all_containers):
-                container = all_containers[idx]
-                driver.execute_script("arguments[0].click();", container)
-                time.sleep(1)
-                
-                # Find input inside this container
-                inp = container.find_element(By.TAG_NAME, 'input')
-                inp.clear()
-                for char in str(value):
-                    inp.send_keys(char)
-                    time.sleep(0.1)
-                inp.send_keys(u'\ue007')
-                time.sleep(wait_time)
-                return True
-                
+        # Find parent container
+        try:
+            container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'css-')]")
+        except:
+            try:
+                container = inp.find_element(By.XPATH, "ancestor::div[contains(@class, 'select__')]")
+            except:
+                container = inp.find_element(By.XPATH, "..")
+        
+        # Scroll and click
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", container)
+        time.sleep(1)
+        driver.execute_script("arguments[0].click();", container)
+        app.logger.info(f"Clicked container for {field_name}")
+        time.sleep(2)
+        
+        # Type value
+        inp.clear()
+        time.sleep(0.5)
+        
+        for char in str(value):
+            inp.send_keys(char)
+            time.sleep(0.15)
+        
+        time.sleep(1)
+        inp.send_keys(u'\ue007')  # Enter
+        app.logger.info(f"Typed {value} + Enter for {field_name}")
+        time.sleep(wait_time)
+        
+        return True
+        
     except Exception as e:
-        app.logger.error(f"Strategy 3 failed for {field_name}: {e}")
-    
-    app.logger.error(f"All strategies failed for {field_name}")
-    return False
+        app.logger.error(f"Error selecting {field_name}: {e}")
+        return False
 
 # ============== MAIN JWT CAPTURE ==============
 def capture_jwt(params):
@@ -163,7 +125,7 @@ def capture_jwt(params):
         
         # Step 1: Set cookies
         driver.get('https://portal.ldtax.gov.bd')
-        time.sleep(2)
+        time.sleep(3)
         
         for name, value in FIXED_COOKIES.items():
             if value:
@@ -178,9 +140,21 @@ def capture_jwt(params):
                 except Exception as e:
                     app.logger.warning(f"Cookie error {name}: {e}")
         
-        # Step 2: Navigate to payment
+        # Step 2: Navigate to payment with longer wait
         driver.get('https://portal.ldtax.gov.bd/citizen/representative-payment')
-        time.sleep(5)  # ✅ Increased wait time for page load
+        
+        # Wait for page to fully load
+        app.logger.info("Waiting for page to load...")
+        time.sleep(10)  # ✅ Increased wait
+        
+        # Wait for React to render
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.TAG_NAME, "form"))
+            )
+            app.logger.info("Form loaded")
+        except:
+            app.logger.warning("Form not found, continuing anyway...")
         
         current_url = driver.current_url
         app.logger.info(f"Current URL: {current_url}")
@@ -188,27 +162,32 @@ def capture_jwt(params):
         if 'login' in current_url:
             return {'success': False, 'error': 'Cookies expired - need fresh cookies'}
         
-        # Take screenshot for debugging
-        try:
-            driver.save_screenshot('page_loaded.png')
-            app.logger.info("Screenshot saved: page_loaded.png")
-        except:
-            pass
+        # Debug: Print page source length
+        page_source = driver.page_source
+        app.logger.info(f"Page source length: {len(page_source)}")
         
-        # Step 3: Fill dropdowns one by one with extra wait
+        # Check if inputs exist
+        all_inputs = driver.find_elements(By.TAG_NAME, "input")
+        app.logger.info(f"Total inputs found: {len(all_inputs)}")
+        
+        # List all input names
+        for i, inp in enumerate(all_inputs[:10]):
+            name = inp.get_attribute('name')
+            app.logger.info(f"Input {i}: name={name}")
+        
+        # Step 3: Fill dropdowns
         dropdown_fields = [
-            ('division_id', params['division_id'], 4),
-            ('district_id', params['district_id'], 4),
-            ('upazila_id', params['upazila_id'], 4),
-            ('mouja_id', params['mouja_id'], 4),
+            ('division_id', params['division_id'], 5),
+            ('district_id', params['district_id'], 5),
+            ('upazila_id', params['upazila_id'], 5),
+            ('mouja_id', params['mouja_id'], 5),
         ]
         
         for field_name, value, wait in dropdown_fields:
             if not click_react_select(driver, field_name, value, wait):
-                # Try one more time with longer wait
                 app.logger.info(f"Retrying {field_name}...")
-                time.sleep(2)
-                if not click_react_select(driver, field_name, value, wait + 2):
+                time.sleep(3)
+                if not click_react_select(driver, field_name, value, wait + 3):
                     return {'success': False, 'error': f'Failed to select {field_name}'}
         
         # Step 4: Fill text fields
@@ -228,12 +207,6 @@ def capture_jwt(params):
         except Exception as e:
             return {'success': False, 'error': f'Holding field error: {e}'}
         
-        # Screenshot before search
-        try:
-            driver.save_screenshot('before_search.png')
-        except:
-            pass
-        
         # Step 5: Click search
         try:
             buttons = driver.find_elements(By.TAG_NAME, 'button')
@@ -250,13 +223,7 @@ def capture_jwt(params):
                 }
             """)
         
-        time.sleep(8)  # ✅ Increased wait for results
-        
-        # Screenshot after search
-        try:
-            driver.save_screenshot('after_search.png')
-        except:
-            pass
+        time.sleep(10)
         
         # Step 6: Extract JWT
         current_url = driver.current_url
