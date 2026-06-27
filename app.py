@@ -1,17 +1,20 @@
 # ============================================
 # app.py - JWT Capture API for Render Docker
+# ChromeDriver explicit path
 # ============================================
 
 from flask import Flask, request, jsonify
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.action_chains import ActionChains
 import time
 import json
 import re
 import os
 import logging
+import subprocess
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -25,7 +28,7 @@ FIXED_COOKIES = {
     'cf_clearance': '2EEySUtlpIoq0e202DkIdekLck_n7aieSnaAwIiSXdw-1782546876-1.2.1.1-flcoha5IXjchjal4pg0JFSonTMB7hjXXGP5REZZSP5qHl1mBqqt7SB_A0WV2gz3PQ.aZad2Q6dtaHxAKMCWlsEQTf2s1SXOiyygChxhvvQt72RQ2LMmD913Z4_AtRGzyU8K3gURVVKDC8CPvdFjgRh1Hqs_hhNvoSdy1WtSG8xu95_bC_9g2DHVphVvoDetV9najnh27XqiDQfajBW9FsNCP7nk6XJ3rTxZkhNbC7Ho5AfGq6FUVkOn1fccHiKvjxcmpUwCYqJrTOWEaJRNNs4mhAniSn.38QJVm2uonXJO_eWkKVG4eVcyZw4QsqH935Hh6c2ImkayzNjXpAmIuuw'
 }
 
-# ============== CHROME SETUP (DOCKER AUTO-DETECT) ==============
+# ============== CHROME SETUP (DOCKER EXPLICIT PATH) ==============
 def get_driver():
     chrome_options = Options()
     chrome_options.add_argument('--headless')
@@ -37,8 +40,13 @@ def get_driver():
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option('useAutomationExtension', False)
     
-    # ✅ Docker image-এ Chrome auto-detect
-    driver = webdriver.Chrome(options=chrome_options)
+    # ✅ Explicit Chrome path for Docker image
+    chrome_options.binary_location = "/usr/bin/google-chrome"
+    
+    # ✅ Explicit ChromeDriver path
+    service = Service('/usr/bin/chromedriver')
+    
+    driver = webdriver.Chrome(service=service, options=chrome_options)
     
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     return driver
