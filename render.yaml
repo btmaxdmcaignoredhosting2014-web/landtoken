@@ -2,7 +2,11 @@ services:
   - type: web
     name: landtoken
     runtime: docker
-    plan: standard
+    plan: free  # ✅ Free tier
+    dockerContext: .
+    dockerfilePath: ./Dockerfile
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: DISPLAY
+        value: ":99"
